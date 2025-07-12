@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2021 Nick Depinet
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import hmac
 import logging
 import requests
@@ -8,7 +30,7 @@ class ArrisClient:
     def __init__(self, host: str = '192.168.100.1', verify_ssl: bool = False):
         # Disable SSL warnings for unverified certs
         if (not verify_ssl):
-            requests.packages.urllib3.disable_warnings() 
+            requests.packages.urllib3.disable_warnings()
         self.logger = logging.getLogger(type(self).__name__)
         self.session = requests.Session()
         self.private_key = None
@@ -69,7 +91,7 @@ class ArrisClient:
             GetCustomerStatusUpstreamChannelInfo
             GetCustomerStatusSecAccount
             GetCustomerStatusLog
-        
+
         Moto HNAPs that we haven't identified the altnerative:
             GetMotoLogStatus
         '''
@@ -118,7 +140,7 @@ class ArrisClient:
 
     def connection_info(self):
         return self.hnap_request('GetCustomerStatusConnectionInfo')
-    
+
     def downstream_info(self):
         channels = self.hnap_request('GetCustomerStatusDownstreamChannelInfo')[
             'CustomerConnDownstreamChannel'
