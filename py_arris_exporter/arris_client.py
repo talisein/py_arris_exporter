@@ -55,7 +55,7 @@ class ArrisClient:
             hmac.digest(
                 (response['PublicKey'] + password).encode(),
                 response['Challenge'].encode(),
-                'md5',
+                'sha256',
             )
             .hex()
             .upper()
@@ -65,7 +65,7 @@ class ArrisClient:
         # Generate the passphrase for logging in
         passphrase = (
             hmac.digest(
-                self.private_key.encode(), response['Challenge'].encode(), 'md5'
+                self.private_key.encode(), response['Challenge'].encode(), 'sha256'
             )
             .hex()
             .upper()
@@ -107,7 +107,7 @@ class ArrisClient:
             hmac.digest(
                 (self.private_key or 'withoutloginkey').encode(),
                 f'{current_time}{soap_action_uri}'.encode(),
-                'md5',
+                'sha256',
             )
             .hex()
             .upper()
