@@ -3,8 +3,7 @@ import time
 import os
 import logging
 from prometheus_client import start_http_server, REGISTRY, GC_COLLECTOR, PLATFORM_COLLECTOR, PROCESS_COLLECTOR
-from handler import ArrisCollector
-import systemd.daemon
+from .handler import ArrisCollector
 
 logging.basicConfig(level=logging.CRITICAL)
 

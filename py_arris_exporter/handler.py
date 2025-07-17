@@ -1,6 +1,6 @@
 import os
 import logging
-from arris_client import ArrisClient
+from .arris_client import ArrisClient
 
 from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily, InfoMetricFamily, Histogram
 from prometheus_client.registry import Collector

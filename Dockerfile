@@ -1,11 +1,13 @@
 FROM alpine:latest
-ENV TINI_VERSION v0.18.0
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-static-amd64 /tini
-RUN chmod +x /tini
-ENTRYPOINT ["/tini", "--"]
 
-RUN mkdir /app \
- && apk --update add python3 py3-pip
+RUN apk add --no-cache python3 py3-pip tini
+ENTRYPOINT ["/sbin/tini", "--"]
+
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+RUN mkdir /app
 WORKDIR /app
 ADD . /app/
 RUN pip3 install -e .
