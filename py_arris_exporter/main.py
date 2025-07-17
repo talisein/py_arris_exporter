@@ -4,8 +4,9 @@ import os
 import logging
 from prometheus_client import start_http_server, REGISTRY, GC_COLLECTOR, PLATFORM_COLLECTOR, PROCESS_COLLECTOR
 from handler import ArrisCollector
+import systemd.daemon
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.CRITICAL)
 
 log = logging.getLogger('main')
 
@@ -19,6 +20,7 @@ def main():
     server_port = int(os.getenv('ARRIS_EXPORTER_PORT') or '9393')
 
     server, t = start_http_server(server_port)
+    systemd.daemon.notify('READY=1')
     while True:
         try:
             time.sleep(1)
