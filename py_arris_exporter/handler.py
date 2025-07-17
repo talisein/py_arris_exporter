@@ -1,110 +1,108 @@
-import re
+import os
 import logging
-from requests import Session
-from bs4 import BeautifulSoup
-from dogpile.cache import make_region
+from arris_client import ArrisClient
 
-region = make_region().configure('dogpile.cache.memory',expiration_time=5)
+from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily, InfoMetricFamily, Histogram
+from prometheus_client.registry import Collector
+
 
 log = logging.getLogger('main')
 
 ARRIS_URL = "http://192.168.100.1/RgConnect.asp"
 
-@region.cache_on_arguments()
-def process():
-    result_body = []
-    s = Session()
-    try:
-        rs = s.get(ARRIS_URL)
-        rs.raise_for_status()
-    except Exception as e:
-        log.error("exception: %s" % (e))
-    html = re.sub(r'(\r|\n|\t)', '', rs.text)
-    soup = BeautifulSoup(html, 'html.parser')
-    tables = soup.find_all('table', attrs={"class": "simpleTable"})
-    for table in tables:
-        for tr in table.find_all('tr'):
-            tds = tr.find_all('td')
-            if (len(tds) == 7):
-                if tds[0].get_text() == "Channel":
-                    continue
-                if tds[1].get_text() == "Locked":
-                    locked = 1
-                else:
-                    locked = 0
-                result_body.append("arris_upstream_locked{{index=\"{index}\",type=\"{modulation}\",channel_id=\"{channel}\",frequency=\"{freq}\"}} {locked}"
-                        .format(
-                            index=tds[0].get_text(),
-                            modulation=tds[2].get_text(),
-                            channel=tds[3].get_text(),
-                            freq=tds[5].get_text().split(' ')[0],
-                            locked=locked))
+LOGIN_LATENCY = Histogram('arris_login_latency_seconds', 'Time spent logging in')
+COLLECT_LATENCY = Histogram('arris_collect_latency_seconds', 'Time spent collecting')
 
-                result_body.append("arris_upstream_symbol_rate{{index=\"{index}\",type=\"{modulation}\",channel_id=\"{channel}\",frequency=\"{freq}\"}} {rate}"
-                        .format(
-                            index=tds[0].get_text(),
-                            modulation=tds[2].get_text(),
-                            channel=tds[3].get_text(),
-                            freq=tds[5].get_text().split(' ')[0],
-                            rate=tds[4].get_text().strip().split(' ')[0]))
-                result_body.append("arris_upstream_power{{index=\"{index}\",type=\"{modulation}\",channel_id=\"{channel}\",frequency=\"{freq}\"}} {power}"
-                        .format(
-                            index=tds[0].get_text(),
-                            modulation=tds[2].get_text(),
-                            channel=tds[3].get_text(),
-                            freq=tds[5].get_text().split(' ')[0],
-                            power=tds[6].get_text().strip().split(' ')[0]))
-            elif (len(tds) == 9):
-                if tds[0].get_text() == "Channel":
-                    continue
-                if tds[1].get_text() == "Locked":
-                    locked = 1
-                else:
-                    locked = 0
-                result_body.append("arris_downstream_locked{{index=\"{index}\",modulation=\"{modulation}\",channel_id=\"{channel}\",frequency=\"{freq}\"}} {locked}"
-                        .format(
-                            index=tds[0].get_text(),
-                            modulation=tds[2].get_text(),
-                            channel=tds[3].get_text(),
-                            freq=tds[4].get_text().split(' ')[0],
-                            locked=locked))
-                result_body.append("arris_downstream_packets_corrected{{index=\"{index}\",modulation=\"{modulation}\",channel_id=\"{channel}\",frequency=\"{freq}\"}} {corrected}"
-                        .format(
-                            index=tds[0].get_text(),
-                            modulation=tds[2].get_text(),
-                            channel=tds[3].get_text(),
-                            freq=tds[4].get_text().split(' ')[0],
-                            corrected=tds[7].get_text()))
-                result_body.append("arris_downstream_packets_uncorrectable{{index=\"{index}\",modulation=\"{modulation}\",channel_id=\"{channel}\",frequency=\"{freq}\"}} {uncorrectable}"
-                        .format(
-                            index=tds[0].get_text(),
-                            modulation=tds[2].get_text(),
-                            channel=tds[3].get_text(),
-                            freq=tds[4].get_text().split(' ')[0],
-                            uncorrectable=tds[8].get_text()))
-                result_body.append("arris_downstream_power{{index=\"{index}\",modulation=\"{modulation}\",channel_id=\"{channel}\",frequency=\"{freq}\"}} {power}"
-                        .format(
-                            index=tds[0].get_text(),
-                            modulation=tds[2].get_text(),
-                            channel=tds[3].get_text(),
-                            freq=tds[4].get_text().split(' ')[0],
-                            power=tds[5].get_text().strip().split(' ')[0]))
-                result_body.append("arris_downstream_snr{{index=\"{index}\",modulation=\"{modulation}\",channel_id=\"{channel}\",frequency=\"{freq}\"}} {snr}"
-                        .format(
-                            index=tds[0].get_text(),
-                            modulation=tds[2].get_text(),
-                            channel=tds[3].get_text(),
-                            freq=tds[4].get_text().split(' ')[0],
-                            snr=tds[6].get_text().strip().split(' ')[0]))
-            else:
-                for tdstr in tds:
-                    if re.search(r'Connectivity State',tdstr.get_text()):
+class ArrisCollector(Collector):
+    def __init__(self):
+        self.arris_hostname = os.getenv('ARRIS_HOST') or '192.168.100.1'
+        self.arris_username = os.getenv('ARRIS_USER') or 'admin'
+        self.arris_password = os.getenv('ARRIS_PASSWORD') or 'password'
 
-                        if tds[1].get_text() == "OK":
-                            state = 1
-                        else:
-                            state = 0
-                        result_body.append("arris_connectivity_state{{}} {state}"
-                            .format(state=state))
-    return '\n'.join(str(x) for x in result_body)
+    def describe(self):
+        gauge_labels = ['index', 'modulation', 'channel_id', 'frequency']
+        yield GaugeMetricFamily('arris_upstream_locked', '', labels=gauge_labels)
+        yield GaugeMetricFamily('arris_upstream_power', 'Channel power in dBmV', labels=gauge_labels)
+        yield GaugeMetricFamily('arris_upstream_symbol_rate', '', labels=gauge_labels)
+        yield GaugeMetricFamily('arris_downstream_locked', '', labels=gauge_labels)
+        yield CounterMetricFamily('arris_downstream_packets_corrected', '', labels=gauge_labels)
+        yield CounterMetricFamily('arris_downstream_packets_uncorrectable', '', labels=gauge_labels)
+        yield GaugeMetricFamily('arris_downstream_power', '', labels=gauge_labels)
+        yield GaugeMetricFamily('arris_downstream_snr', '', labels=gauge_labels)
+        yield InfoMetricFamily('arris_connection', '')
+        yield InfoMetricFamily('arris_status_startup_sequence', '')
+        yield GaugeMetricFamily('arris_connectivity_state', '')
+        yield InfoMetricFamily('arris_software', '')
 
+    @LOGIN_LATENCY.time()
+    def do_login(self, c):
+        login_result = c.login(self.arris_username, self.arris_password)
+        if not login_result:
+            log.error("Failed to login")
+        return login_result
+
+    def collect(self):
+        c = ArrisClient(self.arris_hostname)
+        self.do_login(c)
+        return self.do_collect(c)
+
+    @COLLECT_LATENCY.time()
+    def do_collect(self, c):
+        gauge_labels = ['index', 'modulation', 'channel_id', 'frequency']
+        is_locked = lambda text: 1 if text == 'Locked' else 0
+
+        gauge_upstream_locked = GaugeMetricFamily('arris_upstream_locked', '', labels=gauge_labels)
+        gauge_upstream_power = GaugeMetricFamily('arris_upstream_power', 'Channel power in dBmV', labels=gauge_labels)
+        gauge_upstream_symbol_rate = GaugeMetricFamily('arris_upstream_symbol_rate', '', labels=gauge_labels)
+
+        infos = c.multiple_hnap_request(['GetCustomerStatusUpstreamChannelInfo', 'GetCustomerStatusDownstreamChannelInfo', 'GetCustomerStatusConnectionInfo', 'GetCustomerStatusStartupSequence', 'GetInternetConnectionStatus', 'GetCustomerStatusSoftware'])
+        log.debug(f'INFOS: {infos}')
+        for channel in infos['GetCustomerStatusUpstreamChannelInfo']:
+            log.debug(f'UPSTREAM: {channel}')
+            labels = [channel['Channel'], channel['Type'], channel['ID'], channel['Frequency']]
+            gauge_upstream_locked.add_metric(labels, is_locked(channel['Status']))
+            gauge_upstream_power.add_metric(labels, float(channel['Power']))
+            gauge_upstream_symbol_rate.add_metric(labels, float(channel['Symbol Rate']))
+
+        yield gauge_upstream_locked
+        yield gauge_upstream_power
+        yield gauge_upstream_symbol_rate
+
+        gauge_downstream_locked = GaugeMetricFamily('arris_downstream_locked', '', labels=gauge_labels)
+        gauge_corrected         = CounterMetricFamily('arris_downstream_packets_corrected', '', labels=gauge_labels)
+        gauge_uncorrected       = CounterMetricFamily('arris_downstream_packets_uncorrectable', '', labels=gauge_labels)
+        gauge_power             = GaugeMetricFamily('arris_downstream_packets_power', '', labels=gauge_labels)
+        gauge_snr               = GaugeMetricFamily('arris_downstream_packets_snr', '', labels=gauge_labels)
+        for channel in infos['GetCustomerStatusDownstreamChannelInfo']:
+            log.debug(f'DOWNSTREAM: {channel}')
+            labels = [channel['Channel'], channel['Modulation'], channel['ID'], channel['Frequency']]
+            gauge_downstream_locked.add_metric(labels, is_locked(channel['Status']))
+            gauge_corrected.add_metric(labels, float(channel['Corrected']))
+            gauge_uncorrected.add_metric(labels, float(channel['Uncorrected']))
+            gauge_power.add_metric(labels, float(channel['Power']))
+            gauge_snr.add_metric(labels, float(channel['SNR']))
+
+        yield gauge_downstream_locked
+        yield gauge_corrected
+        yield gauge_uncorrected
+        yield gauge_power
+        yield gauge_snr
+
+        connection_info = infos['GetCustomerStatusConnectionInfo']
+        log.debug(f'Connection Info: {connection_info}')
+        del connection_info['CustomerCurSystemTime']
+        yield InfoMetricFamily('arris_connection', '', value=connection_info)
+
+        startup_sequence = infos['GetCustomerStatusStartupSequence']
+        log.debug(f'Startup sequence: {startup_sequence}')
+        yield InfoMetricFamily('arris_status_startup_sequence', '', value=startup_sequence)
+
+        internet_connection = infos['GetInternetConnectionStatus']
+        log.debug(f'Internet Connection: {internet_connection}')
+        is_connected = lambda text: 1 if text == 'Connected' else 0
+        yield GaugeMetricFamily('arris_connectivity_state', '', value=is_connected(internet_connection['InternetConnection']))
+
+        software_info = infos['GetCustomerStatusSoftware']
+        log.debug(f'Software Info: {software_info}')
+        del software_info['CustomerConnSystemUpTime']
+        yield InfoMetricFamily('arris_software', '', value=software_info)

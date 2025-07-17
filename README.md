@@ -1,6 +1,8 @@
 py_arris_exporter
 ===============
-This is a python script, installed into Docker, which facilitates scraping Arris SB6183 cablemodems for their relevant RF data and surfacing that to prometheus.
+This is a python script, installed into Docker, which facilitates scraping Arris S34 cablemodems for their relevant RF data and surfacing that to prometheus.
+
+The metrics collected here were rooted in [PeterGrace/py_arris_exporter](https://github.com/PeterGrace/py_arris_exporter)'s SB6183 exporter, but the implementation of the HNAP client (which SB6183 doesn't use) was taken from [nickdepinet/arrismonitor](https://github.com/nickdepinet/arrismonitor), and then I rewrote the server to use prometheus_client. PeterGrace's grafana dashboard should still be compatible, but there are additional metrics available as well.
 
 ![Screenshot of grafana dashboard](/doc/ae-screenshot.png?raw=true "Screenshot")
 
@@ -31,6 +33,8 @@ Here's a snippet of my scrape config for prometheus inside of my kubernetes envi
 ```
 
 As you can see, it doesn't have many bells or whistles; it just reports the data I wanted to see to prometheus.
+
+The environment variables `ARRIS_EXPORTER_PORT` (9393), `ARRIS_HOST` (192.168.100.1), `ARRIS_USER` (admin), `ARRIS_PASSWORD` (password) can all be set, otherwise they will use the paranthetical defaults.
 
 ## grafana config
 In the grafana/ subdirectory, I have included my grafana dashboard json that I use to query the datapoints from prometheus, to make the screenshot shown above.

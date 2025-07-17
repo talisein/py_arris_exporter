@@ -132,6 +132,59 @@ class ArrisClient:
 
         return result
 
+    def multiple_hnap_request(self, hnaps):
+        soap_action_uri = 'http://purenetworks.com/HNAP1/GetMultipleHNAPs'
+        current_time = int(time.time())
+        hnap_auth = (
+            hmac.digest(
+                (self.private_key or 'withoutloginkey').encode(),
+                f'{current_time}{soap_action_uri}'.encode(),
+                'sha256',
+            )
+            .hex()
+            .upper()
+        )
+        headers = {
+            'SOAPAction': soap_action_uri,
+            'HNAP_AUTH': f'{hnap_auth} {current_time}',
+        }
+
+        self.logger.debug(f'hnaps is {hnaps}')
+        data = {}
+        for hnap in hnaps:
+            data[f'{hnap}'] = ''
+
+        reqjson = {'GetMultipleHNAPs': data}
+        self.logger.debug(f'The request json is: {reqjson}')
+        response = self.session.post(
+            f'https://{self.host}/HNAP1/', headers=headers, json=reqjson, verify=self.verify_ssl
+        )
+
+        try:
+            result = response.json().get('GetMultipleHNAPsResponse')
+            res = {}
+            if result['GetMultipleHNAPsResult'] == 'OK':
+                del result['GetMultipleHNAPsResult']
+            for hnap in hnaps:
+                hnap_response = result[f'{hnap}Response']
+                if hnap_response[f'{hnap}Result'] == 'OK':
+                    del hnap_response[f'{hnap}Result']
+                    if hnap == 'GetCustomerStatusDownstreamChannelInfo':
+                        res[hnap] = self.parse_downstream_info(hnap_response)
+                    elif hnap == 'GetCustomerStatusUpstreamChannelInfo':
+                        res[hnap] = self.parse_upstream_info(hnap_response)
+                    else:
+                        res[hnap] = hnap_response
+                else:
+                    log.error(f'Got error in HNAP request {hnap}: {hnap_response}')
+            return res
+        except:
+            self.logger.warn('Failed to unwrap response: %s', response.text)
+            return None
+
+    def internet_connection_status(self):
+        return self.hnap_request('GetInternetConnectionStatus')
+
     def software_info(self):
         return self.hnap_request('GetCustomerStatusSoftware')
 
@@ -141,8 +194,8 @@ class ArrisClient:
     def connection_info(self):
         return self.hnap_request('GetCustomerStatusConnectionInfo')
 
-    def downstream_info(self):
-        channels = self.hnap_request('GetCustomerStatusDownstreamChannelInfo')[
+    def parse_downstream_info(self, request_response):
+        channels = request_response[
             'CustomerConnDownstreamChannel'
         ].split('|+|')
         ds_keys = [
@@ -158,8 +211,11 @@ class ArrisClient:
         ]
         return [dict(zip(ds_keys, map(str.strip, c.split('^')))) for c in channels]
 
-    def upstream_info(self):
-        channels = self.hnap_request('GetCustomerStatusUpstreamChannelInfo')[
+    def downstream_info(self):
+        return self.parse_downstream_info(self.hnap_request('GetCustomerStatusDownstreamChannelInfo'))
+
+    def parse_upstream_info(self, request_response):
+        channels = request_response[
             'CustomerConnUpstreamChannel'
         ].split('|+|')
         us_keys = [
@@ -172,6 +228,9 @@ class ArrisClient:
             'Power',  # dBmV
         ]
         return [dict(zip(us_keys, map(str.strip, c.split('^')))) for c in channels]
+
+    def upstream_info(self):
+        return self.parse_upstream_info(self.hnap_request('GetCustomerStatusUpstreamChannelInfo'))
 
     def log_messages(self):
         messages = self.hnap_request('GetCustomerStatusLog')['CustomerStatusLogList'].split(

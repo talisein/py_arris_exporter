@@ -1,22 +1,31 @@
 """The primary module for this skeleton application."""
+import time
+import os
 import logging
-from http.server import HTTPServer
-from .server import Server
+from prometheus_client import start_http_server, REGISTRY, GC_COLLECTOR, PLATFORM_COLLECTOR, PROCESS_COLLECTOR
+from handler import ArrisCollector
 
 logging.basicConfig(level=logging.DEBUG)
 
 log = logging.getLogger('main')
 
+REGISTRY.register(ArrisCollector())
+REGISTRY.unregister(GC_COLLECTOR)
+REGISTRY.unregister(PLATFORM_COLLECTOR)
+REGISTRY.unregister(PROCESS_COLLECTOR)
 
 def main():
-    httpd = HTTPServer(('0.0.0.0', 9393), Server)
-    log.info("Starting http server.")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    httpd.server_close()
 
+    server_port = int(os.getenv('ARRIS_EXPORTER_PORT') or '9393')
+
+    server, t = start_http_server(server_port)
+    while True:
+        try:
+            time.sleep(1)
+        except KeyboardInterrupt:
+            server.shutdown()
+            t.join()
+            return
 
 if __name__ == '__main__':
     main()
