@@ -71,8 +71,8 @@ class ArrisCollector(Collector):
         gauge_downstream_locked = GaugeMetricFamily('arris_downstream_locked', '', labels=gauge_labels)
         gauge_corrected         = CounterMetricFamily('arris_downstream_packets_corrected', '', labels=gauge_labels)
         gauge_uncorrected       = CounterMetricFamily('arris_downstream_packets_uncorrectable', '', labels=gauge_labels)
-        gauge_power             = GaugeMetricFamily('arris_downstream_packets_power', '', labels=gauge_labels)
-        gauge_snr               = GaugeMetricFamily('arris_downstream_packets_snr', '', labels=gauge_labels)
+        gauge_power             = GaugeMetricFamily('arris_downstream_power', '', labels=gauge_labels)
+        gauge_snr               = GaugeMetricFamily('arris_downstream_snr', '', labels=gauge_labels)
         for channel in infos['GetCustomerStatusDownstreamChannelInfo']:
             log.debug(f'DOWNSTREAM: {channel}')
             labels = [channel['Channel'], channel['Modulation'], channel['ID'], channel['Frequency']]
