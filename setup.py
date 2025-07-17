@@ -6,8 +6,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        'prometheus_client',
-        'systemd'
+        'prometheus_client'
     ],
     entry_points='''
         [console_scripts]
